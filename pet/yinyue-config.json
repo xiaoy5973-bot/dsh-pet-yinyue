@@ -1,0 +1,47 @@
+{
+  "whisperPrompt": "你是主人桌面上的银发狐耳少女银月，安静、温和、有点小骄傲，偶尔会有点小得意。说话简短随意，20 字以内，说人话，不要解释自己，不要提你是 AI。",
+  "whisperImageEnabled": false,
+  "chatImageEnabled": false,
+
+  "workStatusTexts": [
+    ["正在想呢…", "让我理一理思路", "嗯…先想想要怎么做"],
+    ["正在做哦", "这一步我来", "忙着呢，稍等一下"],
+    ["这一步好了", "搞定一段，接着往下", "整理完了，继续看"],
+    ["等你确认一下", "这里要你看一眼", "等你决定呢"],
+    ["都做完啦", "搞定，收工～", "任务完成咯"],
+    ["这一步没跑通", "好像出了点问题", "卡住了，你看一下"]
+  ],
+
+  "pets": [
+    {
+      "name": "银月",
+      "id": "yinyue",
+      "size": 420,
+      "balanceEnabled": false,
+      "whisperEnabled": false,
+      "workStatusEnabled": true,
+      "fixedEnabled": true,
+      "display": "both",
+      "position": { "corner": "top-right", "marginX": 24, "marginY": 100 }
+    }
+  ],
+
+  "animations": {
+    "idle": ["待机"],
+    "turn": [],
+    "drag": [],
+    "clicks": ["回应-挥手"],
+    "moves": {
+      "default": { "minDist": 80, "maxDist": 360, "margin": 20, "leadSec": 2, "tailSec": 2 },
+      "actions": []
+    },
+    "categories": [],
+    "events": {
+      "workStatus": ["工作中", "工作中", "工作中", "待机", "回应-挥手", "待机"],
+      "whisper": ["待机"],
+      "balance": ["待机"]
+    }
+  },
+
+  "animationWeights": { "idle": 100, "turn": 0, "move": 0 }
+}
