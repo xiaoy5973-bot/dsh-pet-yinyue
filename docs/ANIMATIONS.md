@@ -39,15 +39,62 @@
 
 ## 想自己加动画？
 
-把新的 `.webm`（VP9 Alpha）放进 `pet/yinyue-animation/`，然后在
-`pet/yinyue-config.json` 的对应池子里写上文件名（不含扩展名），刷新 DSH 页面即可。
+把新的 `.webm`（VP9 Alpha）放进 `pet/yinyue-animation/`，**文件名按下面的规范起**，
+然后跑注册器，它会自动写进 `pet/yinyue-config.json`：
 
-素材规范：
+```bash
+python tools/register_actions.py                 # 改已安装的那份
+python tools/register_actions.py --pet-dir ./pet # 改仓库里的这份
+python tools/register_actions.py --dry-run       # 只预览
+```
+
+### 命名规范
+
+| 前缀 | 落到配置的哪里 | 播放时机 |
+|---|---|---|
+| `待机-xxx` | `animations.idle` | 待机循环，多个轮换 |
+| `回应-xxx` | `animations.clicks` | 点击宠物 |
+| `转向-xxx` | `animations.turn` | 转向 |
+| `拖拽-xxx` | `animations.drag` | 被拖拽 |
+| `移动-xxx` | `animations.moves.actions` | 随机走动 |
+| `小动作-xxx` / `仪态-xxx` / `俏皮-xxx` | `animations.categories`（银月专属） | 待机中随机插入 |
+| `碎碎念-xxx` | `animations.events.whisper` | 说碎碎念时 |
+| `工作-<0-5>-xxx` | `animations.events.workStatus[档位]` | 对应工作状态 |
+| `余额-<0-5>-xxx` | `animations.events.balance[档位]` | 对应余额档位 |
+
+`workStatus` 档位：`0` 思考 / `1` 工作 / `2` 整理 / `3` 等待 / `4` 成功 / `5` 出错。
+`balance` 档位按余额已用百分比：`0` <20% / `1` <40% / `2` <60% / `3` <80% / `4` <100% / `5` =100%。
+
+不带前缀或前缀认不出的文件会被跳过，并提示改名。
+
+### 空槽会让整段动画失效
+
+`events` 池里的槽位**不能是空字符串**。`lib/index.js` 的 `animationsValid()`
+见到 `""` 就判整段 `animations` 非法，插件回落到内置默认动画，且不报错。
+
+注册器补空档位、替换失效引用时都会填一个真实存在的兜底动画名（默认 `待机`），
+并在写盘前自检；手动改配置时也请遵守这条。
+
+### 素材规范
 
 - 容器：WebM，视频编码 VP9，带 alpha 通道
 - 建议尺寸：宽 1920、高 1080（插件会按 `size` 缩放）
 - 建议帧率：24fps
 - **脚底基线与水平中心要和其他动画一致**，否则切换时会「跳一下」
+- 人物在画面里的占比建议和现有素材一致（脚底约在画面 91.7% 高度处，
+  这是 dsh-pet 的 `FEET_Y` 基准，对不上会出现悬空或踩空）
 
 > macOS Safari 需要 `.mov`（HEVC with Alpha）。dsh-pet 会自动优先找
 > `pet/yinyue-animation/mov/` 下的同名文件，找不到再退回 `.webm`。
+
+### 不知道做什么动作？
+
+按银月的人设（安静、温和、有点小骄傲）想了几个方向，供参考：
+
+- **待机类**：呼吸起伏、尾巴轻摆、抬眼、垂眸、理头发
+- **小动作类**：托腮、掩口轻笑、拂袖、抱臂、伸懒腰、看别处
+- **回应类**：挥手、点头、掩口轻笑、微微躬身
+- **状态类**：翻书、写画、沉思、左右张望（对应工作档位）
+
+用视频生成工具做的时候，提示词里把「角色长什么样」「画面怎么构图」「做什么动作」
+「多长」分开写，比一句长句效果好得多。
