@@ -52,7 +52,7 @@
 ### 方式一：一键脚本（推荐）
 
 ```bash
-git clone https://github.com/<your-github-name>/dsh-pet-yinyue.git
+git clone https://github.com/xiaoy5973-bot/dsh-pet-yinyue.git
 cd dsh-pet-yinyue
 python install.py
 ```
@@ -249,7 +249,7 @@ pet pack 的宠物不在那个列表里。银月的开关和位置用**右键菜
 转载或二次创作时请保留：
 
 ```
-银月 · Yinyue — https://github.com/<your-github-name>/dsh-pet-yinyue
+银月 · Yinyue — https://github.com/xiaoy5973-bot/dsh-pet-yinyue
 Licensed under CC BY-NC 4.0
 ```
 
