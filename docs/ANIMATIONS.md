@@ -39,8 +39,37 @@
 
 ## 想自己加动画？
 
-把新的 `.webm`（VP9 Alpha）放进 `pet/yinyue-animation/`，**文件名按下面的规范起**，
-然后跑注册器，它会自动写进 `pet/yinyue-config.json`：
+两步：**做素材**（有绿幕视频才需要）→ **注册**（必做）。
+
+### 第一步：绿幕视频 → 素材
+
+```bash
+python tools/build_asset.py 素材.mp4 --name 待机-呼吸
+```
+
+工具内部按顺序做：抠像 → 对齐到「待机」的身高/脚底/中心 → 亮度对齐 → VP9+Alpha 编码，
+直接产出 `pet/yinyue-animation/待机-呼吸.webm`。
+
+抠像用的是归一化绿度 `E = (G - max(R,B)) / G`，对光照渐变的绿布也稳；
+被头发围住、且面积大又紧邻肤色的绿色区域判为眼睛保留，其余当背景缝抠掉；
+边缘做 despill，白发和尾巴不会留绿边。缩放走预乘 alpha，透明边缘不渗灰。
+
+常见参数：
+
+| 参数 | 用途 |
+|---|---|
+| `--loop N` | 尾部 N 帧交叉淡化回第 2 帧，做无缝循环 |
+| `--trim a,b` | 只取第 a~b 帧 |
+| `--like X` | 对齐基准动画，默认「待机」 |
+| `--feet/--height/--center` | 手动覆盖对齐目标 |
+| `--dry-run` | 只测量不写盘 |
+| `--keep` | 保留中间帧 |
+
+依赖 `numpy`、`Pillow`、`ffmpeg`。
+
+### 第二步：注册
+
+把 `.webm` 放进 `pet/yinyue-animation/`，**文件名按下面的规范起**，然后跑注册器：
 
 ```bash
 python tools/register_actions.py                 # 改已安装的那份
