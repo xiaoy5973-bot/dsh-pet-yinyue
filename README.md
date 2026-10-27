@@ -116,7 +116,7 @@ cp -r pet/* ~/.dsh/dsh-pet/pet/
   {
     "id": "yinyue",        // 实例 id，和别人重名会冲突，建议保留
     "name": "银月",         // 显示名，随便改
-    "size": 420,           // 宽度 px，越大越占地方
+    "size": 462,           // 宽度 px，越大越占地方
     "display": "both",     // web / desktop / both / none
     "position": { "corner": "top-right", "marginX": 24, "marginY": 100 },
     "whisperEnabled": false,    // 碎碎念（会调模型，费 token）
