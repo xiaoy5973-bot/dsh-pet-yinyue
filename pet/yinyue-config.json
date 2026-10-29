@@ -38,8 +38,8 @@
     "categories": [
       {
         "id": "银月专属",
-        "weight": 15,
-        "actions": ["小动作-抖耳朵", "仪态-贵妇行礼"]
+        "weight": 30,
+        "actions": ["小动作-抖耳朵", "仪态-贵妇行礼", "俏皮-害羞捂脸"]
       }
     ],
     "events": {
@@ -49,5 +49,5 @@
     }
   },
 
-  "animationWeights": { "idle": 85, "turn": 0, "move": 0 }
+  "animationWeights": { "idle": 70, "turn": 0, "move": 0 }
 }
