@@ -17,6 +17,9 @@
   --out       输出目录，默认 ../pet/yinyue-animation
   --like X    对齐基准动画，默认「待机」：量它的身高/脚底/中心/亮度，新素材照它来
   --feet/--height/--center  手动指定对齐目标（覆盖 --like 的量测值）
+  --fit-h N   缩放基准：把源素材的「站姿身高」当成 N 像素。行礼/鞠躬/坐姿
+              这类动作会压低身高，全片中位数偏小 → 按中位缩放会把人放大。
+              先用 --dry-run 看逐帧身高，取站姿那一段的中位数填进来。
   --loop N    尾部 N 帧交叉淡化到第 2 帧，做无缝循环
   --trim a,b  只取第 a~b 帧（1 起，含两端）
   --no-match  不做亮度对齐
@@ -248,9 +251,10 @@ def resize_premul(im, w, h):
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
 
 
-def layout(frames, feet_y, char_h, center_x, cw=CANVAS_W, ch=CANVAS_H):
+def layout(frames, feet_y, char_h, center_x, cw=CANVAS_W, ch=CANVAS_H, fit_h=None):
     M = measure(frames)
-    scale = char_h / M["med_h"]
+    src_h = fit_h if fit_h else M["med_h"]
+    scale = char_h / src_h
     oy = int(round(feet_y - M["med_bottom"] * scale))
     ox = int(round(center_x - M["med_x"] * scale))
     out = []
@@ -260,7 +264,7 @@ def layout(frames, feet_y, char_h, center_x, cw=CANVAS_W, ch=CANVAS_H):
         c = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
         c.paste(rs, (ox, oy), rs)
         out.append(c)
-    M.update({"scale": scale, "offset": [ox, oy], "out_h": M["med_h"] * scale})
+    M.update({"scale": scale, "offset": [ox, oy], "out_h": src_h * scale, "fit_h": src_h})
     return out, M
 
 
@@ -418,7 +422,7 @@ def opt(name, default=None, cast=str):
 
 def main():
     opts_with_value = {"--name", "--out", "--feet", "--height", "--center", "--like",
-                       "--loop", "--trim", "--match", "--crf", "--fps"}
+                       "--loop", "--trim", "--match", "--crf", "--fps", "--fit-h"}
     src = None
     skip_next = False
     for a in sys.argv[1:]:
@@ -504,7 +508,10 @@ def main():
         print("[3/4] 归一化到 dsh-pet 基准")
         print("  目标：脚底 y=%d  身高 %.0f px  中心 x=%d  画布 %dx%d"
               % (feet_y, char_h, center_x, CANVAS_W, CANVAS_H))
-        laid, M = layout(frames, feet_y, char_h, center_x)
+        fit_h = opt("--fit-h", None, float)
+        if fit_h:
+            print("  缩放基准：按 --fit-h %.0f（站姿身高）而不是全片中位" % fit_h)
+        laid, M = layout(frames, feet_y, char_h, center_x, fit_h=fit_h)
         print("  原始：身高 %.0f  脚底 %.0f  中心 %.0f"
               % (M["med_h"], M["med_bottom"], M["med_x"]))
         print("  缩放 %.4f  偏移 (%d,%d)" % (M["scale"], M["offset"][0], M["offset"][1]))
@@ -524,6 +531,8 @@ def main():
         M2 = measure(laid)
         print("  复测：身高 %.0f  脚底 %.0f  中心 %.0f"
               % (M2["med_h"], M2["med_bottom"], M2["med_x"]))
+        if fit_h:
+            print("        （身高是全片中位，比站姿 %.0f 小是动作本身压低，正常）" % char_h)
         dx = M2["med_x"] - center_x
         dy = M2["med_bottom"] - feet_y
         if abs(dx) > 6 or abs(dy) > 6:
