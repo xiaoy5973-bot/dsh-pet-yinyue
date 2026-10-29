@@ -6,3 +6,6 @@ desktop.ini
 .idea/
 .vscode/
 *.log
+*.bak
+*.bak-*
+*.json.bak-*

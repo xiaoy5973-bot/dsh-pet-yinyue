@@ -8,6 +8,7 @@
   python register_actions.py --dry-run           # 只看会做什么，不写盘
   python register_actions.py --pet-dir ./pet     # 直接操作指定目录（仓库里改配置用）
   python register_actions.py --anim-dir D:/tmp   # 素材不在默认位置时单独指定
+  python register_actions.py --action-share 30   # 手工指定随机小动作占比（默认按数量自适应）
 
   素材默认位置 = <pet-dir>/yinyue-animation/
   配置默认位置 = <pet-dir>/yinyue-config.json
@@ -16,7 +17,9 @@
   1. 按文件名前缀把新素材路由到对应池子（见下方 ROUTES）
   2. 已在配置里的动作跳过（幂等，反复跑不会重复）
   3. 清理「配置里引用了、但文件不存在」的条目（否则点击无反应 / 404）
-  4. 按 pets[0].fixedEnabled 重新配平 animationWeights 与 categories.weight
+  4. 按 pets[0].fixedEnabled 与动作数量重新配平 animationWeights 与 categories.weight
+     —— 每次动画播完都会重抽，所以占比就等于频率。只有 1~2 个小动作时压到 15%
+     （约半分钟一次），攒到 13 个以上才放到 75%。嫌吵/嫌少就 --action-share 手调。
 
 命名规范（文件名 = 动画名，不含扩展名）：
   待机-xxx        → animations.idle
@@ -65,6 +68,9 @@ INDEXED_POOL = {"工作": "workStatus", "余额": "balance"}
 
 CATEGORY_ID = "银月专属"
 
+# 序列化时，短于这个长度且只含标量的数组/对象保持单行（避免加一个动作就几百行 diff）
+INLINE_MAX = 96
+
 
 def dsh_home():
     env = os.environ.get("DSH_HOME")
@@ -78,9 +84,61 @@ def read_json(path):
         return json.load(f)
 
 
+def _inline_ok(x):
+    """能不能一行写完：只含标量，且渲染后不太长。"""
+    if isinstance(x, dict):
+        kids = list(x.values())
+    elif isinstance(x, list):
+        kids = x
+    else:
+        return False
+    if any(isinstance(k, (dict, list)) for k in kids):
+        return False
+    return len(json.dumps(x, ensure_ascii=False)) <= INLINE_MAX
+
+
+def _inline_render(x):
+    if isinstance(x, dict):
+        return "{ " + ", ".join("%s: %s" % (json.dumps(k, ensure_ascii=False), _inline_render(v))
+                                for k, v in x.items()) + " }"
+    if isinstance(x, list):
+        return "[" + ", ".join(_inline_render(v) for v in x) + "]"
+    return json.dumps(x, ensure_ascii=False)
+
+
+def _render(x, indent=0, root=False):
+    """手写序列化：短数组/短对象保持单行，其余缩进展开。
+
+    json.dump(indent=2) 会把 ["待机"] 拆成三行，导致加一个动作就产生几百行 diff。
+    配置是给人看也给人改的，保持原作者的排版风格比「标准缩进」重要。
+    root=True 时顶层各节之间留一个空行（和原文件一致）。
+    """
+    pad = " " * indent
+    if isinstance(x, dict):
+        if not x:
+            return "{}"
+        if _inline_ok(x):
+            return _inline_render(x)
+        parts = []
+        for i, (k, v) in enumerate(x.items()):
+            chunk = "%s  %s: %s" % (pad, json.dumps(k, ensure_ascii=False), _render(v, indent + 2))
+            if root and i > 0 and isinstance(v, (dict, list)):
+                chunk = "\n" + chunk
+            parts.append(chunk)
+        return "{\n" + ",\n".join(parts) + "\n" + pad + "}"
+    if isinstance(x, list):
+        if not x:
+            return "[]"
+        if _inline_ok(x):
+            return _inline_render(x)
+        body = ",\n".join("%s  %s" % (pad, _render(v, indent + 2)) for v in x)
+        return "[\n" + body + "\n" + pad + "]"
+    return json.dumps(x, ensure_ascii=False)
+
+
 def write_json(path, data):
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write(_render(data, root=True))
         f.write("\n")
 
 
@@ -226,28 +284,49 @@ def prune_missing(cfg, have, fb):
     return removed
 
 
-def balance(cfg):
-    """按 fixedEnabled 配平 idle/turn/move 与 categories.weight。返回说明文本。"""
+def action_share_for(total_actions):
+    """随机小动作应该占多少比例。
+
+    每次动画播完都会重新抽一次，所以「比例」直接等于频率：5 秒的动画、
+    比例 60% ⇒ 平均每 8 秒就插一个，太吵。动作越多越敢放开，
+    1~2 个时压到 15%（约半分钟一次），攒到 13 个以上才接近内置默认。
+    """
+    for cap, share in ((2, 15), (4, 30), (8, 50), (12, 65)):
+        if total_actions <= cap:
+            return share
+    return 75
+
+
+def balance(cfg, forced_share=None):
+    """按 fixedEnabled 与动作数量配平 idle/turn/move 与 categories.weight。
+
+    forced_share：手工指定随机小动作占比（0~100），给了就不走自适应。
+    返回说明文本。
+    """
     pets = cfg.get("pets") or []
     fixed = bool(pets[0].get("fixedEnabled")) if pets else True
-
-    if fixed:
-        idle, turn, move = 40, 0, 0
-    else:
-        idle, turn, move = 30, 5, 15
-    share = 100 - idle - turn - move
 
     cats = (cfg.get("animations") or {}).get("categories") or []
     cats = [c for c in cats if isinstance(c, dict) and c.get("actions")]
     if not cats:
-        # 没有分类可抽：权重全给 idle，避免 60% 落到 FALLBACK
+        # 没有分类可抽：权重全给 idle，避免全部落到 FALLBACK
         cfg.setdefault("animationWeights", {})["idle"] = 100
         cfg["animationWeights"]["turn"] = 0
         cfg["animationWeights"]["move"] = 0
         return "categories 为空 → animationWeights 保持 idle=100"
 
-    # 按动作数量比例分 share，余数给第一个
     total_actions = sum(len(c["actions"]) for c in cats)
+    share = forced_share if forced_share is not None else action_share_for(total_actions)
+
+    if fixed:
+        turn, move = 0, 0
+    else:
+        # 会走会翻的宠物要留出转向/移动的份额
+        turn, move = 5, 15
+        share = min(share, 100 - turn - move)
+    idle = 100 - turn - move - share
+
+    # 按动作数量比例分 share，余数给第一个
     given = 0
     for i, c in enumerate(cats):
         if i == len(cats) - 1:
@@ -262,7 +341,8 @@ def balance(cfg):
     cfg["animationWeights"]["turn"] = turn
     cfg["animationWeights"]["move"] = move
     detail = "、".join("%s=%d" % (c["id"], c["weight"]) for c in cats)
-    return "animationWeights idle=%d turn=%d move=%d｜%s" % (idle, turn, move, detail)
+    return "animationWeights idle=%d turn=%d move=%d｜小动作占比 %d%%（%d 个动作）｜%s" % (
+        idle, turn, move, share, total_actions, detail)
 
 
 def opt(name):
@@ -277,6 +357,19 @@ def opt(name):
 
 def main():
     dry = "--dry-run" in sys.argv
+
+    # 随机小动作占比：不给就走自适应（按动作数量）
+    forced_share = None
+    share_arg = opt("--action-share")
+    if share_arg is not None:
+        try:
+            forced_share = int(share_arg)
+        except ValueError:
+            sys.exit("✗ --action-share 需要 0~100 的整数")
+        if not 1 <= forced_share <= 100:
+            sys.exit("✗ --action-share 需要在 1~100 之间"
+                     "（0 关不掉：插件里 totalW || 1 会把 0 兜成 1，动作照播；"
+                     "真要停就删掉 animations.categories）")
 
     # 目录：--pet-dir 优先（改仓库内的配置），否则用已安装的 DSH 数据根
     pet_dir = opt("--pet-dir")
@@ -340,7 +433,7 @@ def main():
             warns.append("%s 池（%s）是空的" % (k, label))
 
     # 3) 配平
-    note = balance(cfg)
+    note = balance(cfg, forced_share)
 
     # 4) 自检：事件池里绝不能有空串 —— animationsValid 会因此判整段 animations 非法，
     #    插件随即回落内置默认动画（表现是「宠物突然变成默认外观」）
