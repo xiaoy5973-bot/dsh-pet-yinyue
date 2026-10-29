@@ -30,7 +30,7 @@
     "idle": ["待机"],
     "turn": [],
     "drag": [],
-    "clicks": ["回应-挥手"],
+    "clicks": ["回应-挥手", "回应-伸手讨摸"],
     "moves": {
       "default": { "minDist": 80, "maxDist": 360, "margin": 20, "leadSec": 2, "tailSec": 2 },
       "actions": []
